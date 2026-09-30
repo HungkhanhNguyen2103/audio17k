@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Audiobook Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090a0f;
+      --card-bg: rgba(26, 29, 38, 0.7);
+      --card-active: rgba(34, 197, 94, 0.15);
+      --primary: #22c55e;
+      --primary-hover: #16a34a;
+      --accent: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --glass-blur: blur(16px);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: radial-gradient(circle at top right, #172138, var(--bg-dark) 45%);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      padding-bottom: 180px;
+    }
+
+    /* HEADER */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(9, 10, 15, 0.85);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 20px 12px;
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .logo-area { display: flex; align-items: center; gap: 10px; }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--primary), #10b981);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+    .header-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.3px; }
+    .badge {
+      font-size: 0.75rem;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--primary);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .sync-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-refresh {
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #60a5fa;
+    }
+    .btn-refresh:hover:not(:disabled) { background: rgba(59, 130, 246, 0.25); color: #fff; }
+    .btn-sync {
+      background: linear-gradient(135deg, var(--primary), #10b981);
+      color: #052e16;
+      font-weight: 700;
+    }
+    .btn-sync:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .search-box {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 0.85rem;
+      color: #fff;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box:focus { border-color: var(--primary); }
+
+    .status-bar {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 8px;
+      min-height: 15px;
+    }
+
+    /* CHAPTER LIST */
+    .chapter-list {
+      list-style: none;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chapter-item {
+      padding: 14px 18px;
+      background: var(--card-bg);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .chapter-item:hover {
+      background: rgba(38, 43, 56, 0.8);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateX(3px);
+    }
+    .chapter-item.active {
+      background: var(--card-active);
+      border-color: rgba(34, 197, 94, 0.5);
+      box-shadow: 0 4px 20px rgba(34, 197, 94, 0.1);
+    }
+    .chap-meta { display: flex; align-items: center; gap: 14px; }
+    .chap-index {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .chapter-item.active .chap-index { background: var(--primary); color: #000; }
+    .chap-title { font-size: 0.92rem; font-weight: 600; color: #e2e8f0; }
+    .chapter-item.active .chap-title { color: var(--primary); }
+    .chap-status { font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+
+    /* PLAYER DOCK */
+    .player-dock {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(15, 17, 26, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-top: 1px solid var(--border-color);
+      padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 50;
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .dock-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .dock-left { display: flex; flex-direction: column; max-width: 70%; }
+    .dock-title { font-size: 0.95rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+    .dock-sub { font-size: 0.72rem; color: var(--text-muted); }
+    
+    .btn-speed {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      padding: 5px 11px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-speed:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+
+    /* PROGRESS BAR */
+    .progress-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .time-lbl { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 36px; }
+    .seek-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 5px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.15);
+      outline: none;
+      cursor: pointer;
+    }
+    .seek-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+    }
+
+    /* CONTROLS */
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 22px;
+    }
+    .ctrl-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.15rem;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ctrl-btn:hover { color: #fff; transform: scale(1.08); }
+    .play-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), #10b981);
+      color: #052e16;
+      font-size: 1.25rem;
+      box-shadow: 0 4px 15px rgba(34, 197, 94, 0.35);
+    }
+    .play-btn:hover { transform: scale(1.06); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <div class="logo-area">
+        <div class="logo-icon">♬</div>
+        <span class="header-title">Audio Novel</span>
+      </div>
+      <span class="badge" id="fileCount">0 MP3</span>
+    </div>
+
+    <!-- Thanh đồng bộ chỉ hiển thị khi chạy ở localhost/máy cá nhân -->
+    <div class="sync-panel" id="syncPanel">
+      <button class="btn btn-refresh" id="btnRefresh" onclick="loadChapters()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Quét Local
+      </button>
+      <button class="btn btn-sync" id="btnSync" onclick="startSync()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        Đồng bộ R2
+      </button>
+    </div>
+
+    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Tìm kiếm chương..." oninput="filterChapters()">
+    <div class="status-bar" id="syncMsg">Sẵn sàng</div>
+  </header>
+
+  <ul class="chapter-list" id="chapterList"></ul>
+
+  <div class="player-dock">
+    <div class="dock-meta">
+      <div class="dock-left">
+        <div class="dock-title" id="trackName">Chưa chọn chương</div>
+        <div class="dock-sub" id="trackSub">Chọn chương để bắt đầu nghe</div>
+      </div>
+      <button class="btn-speed" id="speedTag" onclick="changeSpeed()">1.0x</button>
+    </div>
+
+    <div class="progress-wrap">
+      <span class="time-lbl" id="curTime">0:00</span>
+      <input type="range" class="seek-slider" id="seekSlider" value="0" min="0" max="100" oninput="onSeekInput()" onchange="onSeekChange()">
+      <span class="time-lbl" id="durTime">0:00</span>
+    </div>
+
+    <div class="controls">
+      <button class="ctrl-btn" onclick="prevChapter()" title="Chương trước">⏮</button>
+      <button class="ctrl-btn" onclick="seekRelative(-15)" title="Lùi 15s" style="font-size: 0.95rem;">-15s</button>
+      <button class="ctrl-btn play-btn" id="playBtn" onclick="togglePlay()">▶</button>
+      <button class="ctrl-btn" onclick="seekRelative(15)" title="Tiến 15s" style="font-size: 0.95rem;">+15s</button>
+      <button class="ctrl-btn" onclick="nextChapter()" title="Chương tiếp theo">⏭</button>
+    </div>
+  </div>
+
+  <audio id="audioEl" preload="metadata"></audio>
+
+  <script>
+    const audioEl = document.getElementById('audioEl');
+    const trackName = document.getElementById('trackName');
+    const trackSub = document.getElementById('trackSub');
+    const chapterList = document.getElementById('chapterList');
+    const syncMsg = document.getElementById('syncMsg');
+    const syncPanel = document.getElementById('syncPanel');
+    const btnSync = document.getElementById('btnSync');
+    const btnRefresh = document.getElementById('btnRefresh');
+    const fileCount = document.getElementById('fileCount');
+    const speedTag = document.getElementById('speedTag');
+    const playBtn = document.getElementById('playBtn');
+    const seekSlider = document.getElementById('seekSlider');
+    const curTime = document.getElementById('curTime');
+    const durTime = document.getElementById('durTime');
+    const searchBox = document.getElementById('searchBox');
+
+    let chapters = [];
+    let currentIdx = -1;
+    let isSeeking = false;
+    const speedList = [1.0, 1.25, 1.5, 1.75, 2.0];
+    let speedIndex = 0;
+
+    // Kiểm tra môi trường chạy (Localhost hay GitHub Pages/Deploy)
+    const isLocalServer = window.location.protocol.startsWith('http') && 
+                          (window.location.port === "8080" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
+    if (!isLocalServer) {
+      // Khi deploy công khai: ẩn 2 nút đồng bộ (vì không có backend python trên cloud tĩnh)
+      if (syncPanel) syncPanel.style.display = 'none';
+    }
+
+    function formatTime(secs) {
+      if (isNaN(secs) || secs < 0) return "0:00";
+      const m = Math.floor(secs / 60);
+      const s = Math.floor(secs % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    async function loadChapters() {
+      try {
+        syncMsg.innerText = "Đang tải danh sách chương...";
+        // Tự động chuyển đổi endpoint: chạy local gọi /api/chapters, deploy thì gọi file chapters.json
+        const fetchUrl = isLocalServer ? ('/api/chapters?t=' + Date.now()) : ('chapters.json?t=' + Date.now());
+
+        const res = await fetch(fetchUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        
+        chapters = await res.json();
+        fileCount.innerText = `${chapters.length} MP3`;
+        renderList(chapters);
+
+        syncMsg.innerText = `Đã tìm thấy ${chapters.length} chương MP3`;
+
+        const savedId = localStorage.getItem('novel_last_id');
+        const savedTime = localStorage.getItem('novel_last_sec');
+        const found = chapters.findIndex(c => c.id == savedId);
+        if (found !== -1) {
+          playTrack(found, parseFloat(savedTime || 0), false);
+        }
+      } catch (e) {
+        syncMsg.innerText = "Lỗi nạp danh sách: " + e.message;
+      }
+    }
+
+    function renderList(list) {
+      chapterList.innerHTML = '';
+      if (list.length === 0) {
+        chapterList.innerHTML = '<li style="text-align:center; color:var(--text-muted); padding:30px;">Không tìm thấy file phù hợp</li>';
+        return;
+      }
+
+      list.forEach((chap) => {
+        const actualIdx = chapters.findIndex(c => c.id === chap.id);
+        const li = document.createElement('li');
+        li.className = `chapter-item ${actualIdx === currentIdx ? 'active' : ''}`;
+        li.id = `item-${actualIdx}`;
+        li.innerHTML = `
+          <div class="chap-meta">
+            <span class="chap-index">${actualIdx + 1}</span>
+            <div>
+              <div class="chap-title">${chap.title}</div>
+              <div class="chap-status">${chap.filename || 'Cloud Audio (R2)'}</div>
+            </div>
+          </div>
+          <div class="chap-status"><span>Phát</span> ▶</div>
+        `;
+        li.onclick = () => playTrack(actualIdx);
+        chapterList.appendChild(li);
+      });
+    }
+
+    function filterChapters() {
+      const q = searchBox.value.trim().toLowerCase();
+      const filtered = chapters.filter(c => c.title.toLowerCase().includes(q) || String(c.id).includes(q));
+      renderList(filtered);
+    }
+
+    function playTrack(idx, startTime = 0, autoPlay = true) {
+      if (idx < 0 || idx >= chapters.length) return;
+      currentIdx = idx;
+      const chap = chapters[idx];
+
+      document.querySelectorAll('.chapter-item').forEach(el => el.classList.remove('active'));
+      const activeItem = document.getElementById(`item-${idx}`);
+      if (activeItem) activeItem.classList.add('active');
+
+      trackName.innerText = chap.title;
+      trackSub.innerText = "Đang phát • " + (chap.filename || "Cloud Audio");
+      audioEl.src = chap.url;
+      audioEl.currentTime = startTime;
+
+      if (autoPlay) {
+        audioEl.play().catch(() => {});
+      }
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: chap.title,
+          album: 'Audiobook Novel'
+        });
+      }
+      localStorage.setItem('novel_last_id', chap.id);
+    }
+
+    function togglePlay() {
+      if (!audioEl.src) {
+        if (chapters.length > 0) playTrack(0);
+        return;
+      }
+      if (audioEl.paused) audioEl.play();
+      else audioEl.pause();
+    }
+
+    audioEl.onplay = () => playBtn.innerText = "⏸";
+    audioEl.onpause = () => playBtn.innerText = "▶";
+
+    audioEl.ontimeupdate = () => {
+      if (!isSeeking && audioEl.duration) {
+        seekSlider.value = (audioEl.currentTime / audioEl.duration) * 100;
+        curTime.innerText = formatTime(audioEl.currentTime);
+      }
+      if (audioEl.currentTime > 0) {
+        localStorage.setItem('novel_last_sec', audioEl.currentTime);
+      }
+    };
+
+    audioEl.onloadedmetadata = () => {
+      durTime.innerText = formatTime(audioEl.duration);
+    };
+
+    audioEl.onended = () => nextChapter();
+
+    function onSeekInput() {
+      isSeeking = true;
+      if (audioEl.duration) {
+        curTime.innerText = formatTime((seekSlider.value / 100) * audioEl.duration);
+      }
+    }
+
+    function onSeekChange() {
+      if (audioEl.duration) {
+        audioEl.currentTime = (seekSlider.value / 100) * audioEl.duration;
+      }
+      isSeeking = false;
+    }
+
+    function seekRelative(secs) {
+      if (audioEl.duration) {
+        audioEl.currentTime = Math.max(0, Math.min(audioEl.duration, audioEl.currentTime + secs));
+      }
+    }
+
+    function prevChapter() {
+      if (currentIdx > 0) playTrack(currentIdx - 1);
+    }
+
+    function nextChapter() {
+      if (currentIdx + 1 < chapters.length) playTrack(currentIdx + 1);
+    }
+
+    function changeSpeed() {
+      speedIndex = (speedIndex + 1) % speedList.length;
+      audioEl.playbackRate = speedList[speedIndex];
+      speedTag.innerText = `${speedList[speedIndex]}x`;
+    }
+
+    async function startSync() {
+      try {
+        btnSync.disabled = true;
+        btnRefresh.disabled = true;
+        const res = await fetch('/api/trigger_sync', { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        trackSyncProgress();
+      } catch (e) {
+        syncMsg.innerText = "Lỗi kích hoạt sync: " + e.message;
+        btnSync.disabled = false;
+        btnRefresh.disabled = false;
+      }
+    }
+
+    async function trackSyncProgress() {
+      try {
+        const res = await fetch('/api/sync_status?t=' + Date.now());
+        const data = await res.json();
+        syncMsg.innerText = data.message;
+
+        if (data.running) {
+          btnSync.disabled = true;
+          btnRefresh.disabled = true;
+          setTimeout(trackSyncProgress, 1200);
+        } else {
+          btnSync.disabled = false;
+          btnRefresh.disabled = false;
+        }
+      } catch (e) {
+        btnSync.disabled = false;
+        btnRefresh.disabled = false;
+      }
+    }
+
+    loadChapters();
+  </script>
+</body>
+</html>
