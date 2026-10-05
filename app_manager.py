@@ -9,12 +9,10 @@ from dotenv import load_dotenv
 import boto3
 from botocore.config import Config
 
-# Cấu hình đường dẫn thư mục
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 RESULT_DIR = os.path.join(PROJECT_ROOT, "result")
 
-# Tải cấu hình từ file .env trong cùng thư mục audio17k/
 env_path = os.path.join(BASE_DIR, ".env")
 load_dotenv(dotenv_path=env_path)
 
@@ -47,12 +45,11 @@ def get_local_ip():
     return ip
 
 def extract_chapter_number(filename):
-    """Trích xuất số chương an toàn từ tên file để sắp xếp, tránh lỗi regex group."""
     match = re.search(r'\d+', filename)
     return int(match.group(0)) if match else 999999
 
 def scan_local_mp3():
-    """Chỉ đọc các file .mp3 từ thư mục result ngoài, bỏ qua và giữ nguyên toàn bộ file .wav."""
+    """Đọc toàn bộ file MP3 từ local để hiển thị trên trình phát local."""
     chapters = []
     if os.path.exists(RESULT_DIR):
         for f in os.listdir(RESULT_DIR):
@@ -69,37 +66,60 @@ def scan_local_mp3():
 
 sync_state = {"running": False, "message": "Sẵn sàng", "current": 0, "total": 0}
 
-def sync_worker():
+def sync_and_prune_r2_worker(start_chap, end_chap):
     global sync_state
     sync_state["running"] = True
-    sync_state["message"] = "Đang kiểm tra danh sách file trên Cloudflare R2..."
+    sync_state["message"] = f"Bắt đầu lọc & đồng bộ dải chương {start_chap} -> {end_chap} lên Cloudflare R2..."
     
     try:
         if not all([R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME]):
-            raise ValueError("Thiếu thông tin cấu hình Cloudflare R2 trong file .env!")
+            raise ValueError("Thiếu cấu hình Cloudflare R2 trong .env!")
 
+        # 1. Lọc các file MP3 ở local thuộc dải đã chọn (HOÀN TOÀN KHÔNG XÓA LOCAL)
+        all_local_mp3 = [f for f in os.listdir(RESULT_DIR) if f.lower().endswith('.mp3')]
+        target_local_files = [
+            f for f in all_local_mp3 
+            if start_chap <= extract_chapter_number(f) <= end_chap
+        ]
+        sorted_targets = sorted(target_local_files, key=extract_chapter_number)
+
+        # 2. Quét Cloudflare R2: tìm file thừa để xóa và kiểm tra file đã tồn tại
+        sync_state["message"] = "Đang kiểm tra danh sách file trên Cloudflare R2..."
         s3 = get_s3_client()
-        local_files = [f for f in os.listdir(RESULT_DIR) if f.lower().endswith('.mp3')]
-        sync_state["total"] = len(local_files)
-        sync_state["current"] = 0
-
-        # Lấy danh sách file đã tồn tại trên R2 để tránh upload trùng lặp
-        remote_files = set()
         paginator = s3.get_paginator('list_objects_v2')
+
+        remote_existing_targets = set()
+        r2_keys_to_delete = []
+
         for page in paginator.paginate(Bucket=R2_BUCKET_NAME):
             if 'Contents' in page:
                 for obj in page['Contents']:
-                    remote_files.add(obj['Key'])
+                    key = obj['Key']
+                    if key.lower().endswith('.mp3'):
+                        c_num = extract_chapter_number(key)
+                        # Nếu file nằm ngoài dải start -> end thì đưa vào danh sách xóa
+                        if c_num < start_chap or c_num > end_chap:
+                            r2_keys_to_delete.append({'Key': key})
+                        else:
+                            remote_existing_targets.add(key)
 
+        # 3. CHỈ XÓA TRÊN CLOUDFLARE R2
+        if r2_keys_to_delete:
+            sync_state["message"] = f"Đang xóa {len(r2_keys_to_delete)} file ngoài dải trên Cloudflare R2..."
+            for i in range(0, len(r2_keys_to_delete), 1000):
+                batch = r2_keys_to_delete[i:i+1000]
+                s3.delete_objects(Bucket=R2_BUCKET_NAME, Delete={'Objects': batch})
+
+        # 4. Upload các file trong dải từ local lên R2 (nếu chưa có)
+        sync_state["total"] = len(sorted_targets)
         chapters_json = []
-        sorted_files = sorted(local_files, key=extract_chapter_number)
 
-        for idx, filename in enumerate(sorted_files):
+        for idx, filename in enumerate(sorted_targets):
             file_path = os.path.join(RESULT_DIR, filename)
             chap_num = extract_chapter_number(filename)
 
-            if filename not in remote_files:
-                sync_state["message"] = f"Đang tải lên: {filename} ({idx+1}/{len(local_files)})"
+            if filename not in remote_existing_targets:
+                sync_state["message"] = f"Đang upload lên R2: {filename} ({idx+1}/{len(sorted_targets)})"
                 s3.upload_file(
                     file_path,
                     R2_BUCKET_NAME,
@@ -114,14 +134,14 @@ def sync_worker():
             })
             sync_state["current"] = idx + 1
 
-        # Ghi file chapters.json ra thư mục audio17k để dùng cho GitHub Pages
+        # 5. Cập nhật file chapters.json cho GitHub Pages
         json_path = os.path.join(BASE_DIR, "chapters.json")
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(chapters_json, f, ensure_ascii=False, indent=2)
 
-        sync_state["message"] = f"Hoàn tất! Đã đồng bộ {len(local_files)} chương MP3 lên R2."
+        sync_state["message"] = f"Hoàn tất! Đã đồng bộ {len(sorted_targets)} chương ({start_chap}->{end_chap}) và dọn dẹp R2."
     except Exception as e:
-        sync_state["message"] = f"Lỗi đồng bộ: {str(e)}"
+        sync_state["message"] = f"Lỗi: {str(e)}"
     finally:
         sync_state["running"] = False
 
@@ -174,11 +194,21 @@ class AudioHandler(SimpleHTTPRequestHandler):
         clean_path = parsed.path.strip('/')
 
         if clean_path == 'api/trigger_sync':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length) if length > 0 else b'{}'
+            try:
+                data = json.loads(body.decode('utf-8'))
+                start_chap = int(data.get('start', 1))
+                end_chap = int(data.get('end', 999999))
+            except Exception:
+                start_chap, end_chap = 1, 999999
+
             if not sync_state["running"]:
-                threading.Thread(target=sync_worker, daemon=True).start()
+                threading.Thread(target=sync_and_prune_r2_worker, args=(start_chap, end_chap), daemon=True).start()
                 res = {"status": "started"}
             else:
                 res = {"status": "in_progress"}
+
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')

@@ -30,7 +30,6 @@
       padding-bottom: 180px;
     }
 
-    /* HEADER */
     header {
       position: sticky;
       top: 0;
@@ -72,15 +71,40 @@
     }
 
     .sync-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .range-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .num-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      color: #fff;
+      font-family: inherit;
+      outline: none;
+      text-align: center;
+    }
+    .num-input:focus { border-color: var(--primary); }
+    .range-sep { font-size: 0.8rem; color: var(--text-muted); }
+
+    .sync-buttons {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      margin-bottom: 10px;
     }
     .btn {
       border: none;
       border-radius: 10px;
-      padding: 11px 14px;
+      padding: 10px 12px;
       font-size: 0.82rem;
       font-weight: 600;
       font-family: inherit;
@@ -216,7 +240,6 @@
     }
     .btn-speed:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
 
-    /* PROGRESS BAR */
     .progress-wrap {
       display: flex;
       align-items: center;
@@ -242,7 +265,6 @@
       box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
     }
 
-    /* CONTROLS */
     .controls {
       display: flex;
       justify-content: center;
@@ -283,16 +305,23 @@
       <span class="badge" id="fileCount">0 MP3</span>
     </div>
 
-    <!-- Thanh đồng bộ chỉ hiển thị khi chạy ở localhost/máy cá nhân -->
+    <!-- Thanh lọc & đồng bộ -->
     <div class="sync-panel" id="syncPanel">
-      <button class="btn btn-refresh" id="btnRefresh" onclick="loadChapters()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        Quét Local
-      </button>
-      <button class="btn btn-sync" id="btnSync" onclick="startSync()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-        Đồng bộ R2
-      </button>
+      <div class="range-inputs">
+        <input type="number" class="num-input" id="chapStart" placeholder="Từ chap" min="1">
+        <span class="range-sep">➝</span>
+        <input type="number" class="num-input" id="chapEnd" placeholder="Đến chap" min="1">
+      </div>
+      <div class="sync-buttons">
+        <button class="btn btn-refresh" id="btnRefresh" onclick="loadChapters()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Quét Local
+        </button>
+        <button class="btn btn-sync" id="btnSync" onclick="startSyncAndPruneR2()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+          Đồng bộ R2
+        </button>
+      </div>
     </div>
 
     <input type="text" class="search-box" id="searchBox" placeholder="🔍 Tìm kiếm chương..." oninput="filterChapters()">
@@ -343,6 +372,8 @@
     const curTime = document.getElementById('curTime');
     const durTime = document.getElementById('durTime');
     const searchBox = document.getElementById('searchBox');
+    const chapStart = document.getElementById('chapStart');
+    const chapEnd = document.getElementById('chapEnd');
 
     let chapters = [];
     let currentIdx = -1;
@@ -350,13 +381,11 @@
     const speedList = [1.0, 1.25, 1.5, 1.75, 2.0];
     let speedIndex = 0;
 
-    // Kiểm tra môi trường chạy (Localhost hay GitHub Pages/Deploy)
     const isLocalServer = window.location.protocol.startsWith('http') && 
                           (window.location.port === "8080" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
-    if (!isLocalServer) {
-      // Khi deploy công khai: ẩn 2 nút đồng bộ (vì không có backend python trên cloud tĩnh)
-      if (syncPanel) syncPanel.style.display = 'none';
+    if (!isLocalServer && syncPanel) {
+      syncPanel.style.display = 'none';
     }
 
     function formatTime(secs) {
@@ -369,7 +398,6 @@
     async function loadChapters() {
       try {
         syncMsg.innerText = "Đang tải danh sách chương...";
-        // Tự động chuyển đổi endpoint: chạy local gọi /api/chapters, deploy thì gọi file chapters.json
         const fetchUrl = isLocalServer ? ('/api/chapters?t=' + Date.now()) : ('chapters.json?t=' + Date.now());
 
         const res = await fetch(fetchUrl);
@@ -379,7 +407,7 @@
         fileCount.innerText = `${chapters.length} MP3`;
         renderList(chapters);
 
-        syncMsg.innerText = `Đã tìm thấy ${chapters.length} chương MP3`;
+        syncMsg.innerText = `Đã nạp ${chapters.length} chương MP3`;
 
         const savedId = localStorage.getItem('novel_last_id');
         const savedTime = localStorage.getItem('novel_last_sec');
@@ -514,11 +542,26 @@
       speedTag.innerText = `${speedList[speedIndex]}x`;
     }
 
-    async function startSync() {
+    async function startSyncAndPruneR2() {
+      const start = parseInt(chapStart.value.trim());
+      const end = parseInt(chapEnd.value.trim());
+
+      if (isNaN(start) || isNaN(end) || start > end) {
+        alert("Vui lòng nhập dải chương hợp lệ (Chương bắt đầu <= Chương kết thúc)!");
+        return;
+      }
+
+      const confirmMsg = `XÁC NHẬN ĐỒNG BỘ R2:\n- Đồng bộ chương từ ${start} đến ${end} lên Cloudflare R2.\n- File ở Local (máy tính) ĐƯỢC GIỮ NGUYÊN HOÀN TOÀN.\n- Chỉ các file MP3 ngoài dải ${start} - ${end} trên Cloudflare R2 sẽ bị XÓA.\n\nTiếp tục thực hiện?`;
+      if (!confirm(confirmMsg)) return;
+
       try {
         btnSync.disabled = true;
         btnRefresh.disabled = true;
-        const res = await fetch('/api/trigger_sync', { method: 'POST' });
+        const res = await fetch('/api/trigger_sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start, end })
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         trackSyncProgress();
       } catch (e) {
